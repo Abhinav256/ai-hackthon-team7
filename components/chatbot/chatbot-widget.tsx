@@ -1,8 +1,9 @@
-"use client"
+"use client";
 
 import { useState, useRef, useEffect } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -248,49 +249,52 @@ export function ChatbotWidget() {
     transport: new DefaultChatTransport({
       api: "/api/chat",
       fetch: async (resource, options) => {
-        // Get dashboard from pathname
-        const currentPath = typeof window !== "undefined" ? window.location.pathname : ""
-        const dashboard = currentPath.includes("/financial") ? "financial" : currentPath.includes("/sales") ? "sales" : "financial"
-        
-        // Get session ID from localStorage or cookie
-        const sessionId = typeof window !== "undefined" ? localStorage.getItem("gs_session_id") : null
-        
-        // Parse the request body to add dashboard
+        const currentPath =
+          typeof window !== "undefined" ? window.location.pathname : ""
+
+        const dashboard = currentPath.includes("/financial")
+          ? "financial"
+          : currentPath.includes("/sales")
+          ? "sales"
+          : "financial"
+
+        const sessionId =
+          typeof window !== "undefined"
+            ? localStorage.getItem("gs_session_id")
+            : null
+
         const body = options?.body ? JSON.parse(options.body as string) : {}
         body.dashboard = dashboard
-        
-        // Create new options with updated body
+
         const updatedOptions = {
           ...options,
           body: JSON.stringify(body),
-          credentials: "include" as const, // Include cookies in the request
+          credentials: "include" as const,
           headers: {
             ...((options?.headers || {}) as Record<string, string>),
             "Content-Type": "application/json",
-            ...(sessionId ? { "X-Session-ID": sessionId } : {})
-          }
+            ...(sessionId ? { "X-Session-ID": sessionId } : {}),
+          },
         }
-        
-        console.log(`[CHATBOT] Sending request with dashboard: ${dashboard}, sessionId: ${sessionId}`)
+
         const response = await fetch(resource, updatedOptions)
-        
+
         // If we get a 403 error, clone and return it so the error can be read by the error handler
         if (response.status === 403) {
           console.error("[CHATBOT] Authorization error (403) received from server")
           // Clone the response so it can be read by the error handler
           return response.clone()
         }
-        
+
         return response
-      }
+      },
     }),
     onError: (error) => {
       console.error("[CHATBOT] Error:", error)
-      // Try to extract the error response from the error object
       const errorData = (error as any)?.data || error
       const parsedError = parseErrorResponse(errorData)
       setError(parsedError)
-      
+
       // If this is a 403 authorization error, mark the last message as failed
       // so it won't be displayed in the chat
       if (parsedError.code === "403_FORBIDDEN") {
@@ -300,23 +304,26 @@ export function ChatbotWidget() {
       }
     },
     onFinish: (result) => {
-      console.log("[CHATBOT] Message finished")
       const text = ((result.message as any).parts || [])
-        .filter((part: any) => part?.type === "text" || part?.type === "reasoning")
+        .filter(
+          (part: any) => part?.type === "text" || part?.type === "reasoning"
+        )
         .map((part: any) => part.text || "")
         .join("")
 
-      if (text.includes("COMPARISON_DATA:")) {
-        try {
-          const jsonMatch = text.match(/COMPARISON_DATA:([\s\S]*?)END_COMPARISON/)
-          if (jsonMatch) {
-            const data = JSON.parse(jsonMatch[1])
-            setComparisonData(data)
-          }
-        } catch {}
-      }
-    },
-  })
+    if (text.includes("COMPARISON_DATA:")) {
+      try {
+        const jsonMatch = text.match(
+          /COMPARISON_DATA:([\s\S]*?)END_COMPARISON/
+        )
+        if (jsonMatch) {
+          const data = JSON.parse(jsonMatch[1])
+          setComparisonData(data)
+        }
+      } catch {}
+    }
+  },
+})
 
   // Custom submit handler
   const handleSubmit = (e: React.FormEvent) => {
