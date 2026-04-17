@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ArrowUpRight, BarChart3, CreditCard, DollarSign, TrendingUp, AlertTriangle, CheckCircle, Clock, XCircle, Bot, Download } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { ArrowUpRight, BarChart3, CreditCard, DollarSign, TrendingUp, AlertTriangle, CheckCircle, Clock, XCircle, Bot, Download, LogOut } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { useChatbot } from "@/components/chatbot/chatbot-provider"
 import { anomalyStateService } from "@/components/anomaly-state.service"
@@ -12,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/components/ui/use-toast"
 import { AIChatWidget } from "@/components/ai-chat-widget"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { isAuthenticated, clearSession } from "@/lib/session"
 
 interface TradingDesk {
   desk_id: string
@@ -44,6 +46,7 @@ interface Summary {
 }
 
 export default function FinancialDashboardPage() {
+  const router = useRouter()
   const [tradingDesks, setTradingDesks] = useState<TradingDesk[]>([])
   const [summary, setSummary] = useState<Summary>({ totalDesks: 0, reconciled: 0, pending: 0, anomalies: 0 })
   const [anomalies, setAnomalies] = useState<Anomaly[]>([])
@@ -60,6 +63,12 @@ export default function FinancialDashboardPage() {
   const [showResolutionPopup, setShowResolutionPopup] = useState(false)
   const { toast } = useToast()
   const { sendAnomalyToChat, setOnAnomalyResolved } = useChatbot()
+
+  const handleLogout = () => {
+    console.log("[FINANCIAL LOGOUT] User logging out")
+    clearSession()
+    router.push("/")
+  }
 
   const generateAISuggestion = (anomaly: Anomaly) => {
     // Generate AI-powered analysis based on anomaly type
@@ -124,12 +133,29 @@ export default function FinancialDashboardPage() {
   }
 
   useEffect(() => {
-    // Generate random anomaly total on mount
+    // 1. First check if user is authenticated
+    if (!isAuthenticated()) {
+      console.log("[FINANCIAL DASHBOARD] User not authenticated, redirecting to login")
+      router.push("/")
+      return
+    }
+
+    // 2. Verify session is still valid
+    const sessionId = localStorage.getItem("gs_session_id")
+    if (!sessionId) {
+      console.log("[FINANCIAL DASHBOARD] No session ID found, redirecting to login")
+      clearSession()
+      router.push("/")
+      return
+    }
+
+    // 3. Generate random anomaly total on mount and fetch data
     const randomTotal = Math.floor(Math.random() * (600 - 100 + 1)) + 100
     setTotalAnomalies(randomTotal)
     fetchTradingDesks()
     fetchAnomalies()
-  }, [])
+  }, [router])
+
 
   useEffect(() => {
     // Register refresh callbacks for chatbot to call on anomaly resolution
@@ -432,6 +458,14 @@ export default function FinancialDashboardPage() {
               <ThemeToggle />
               <Button variant="secondary" className="rounded-full px-5 py-3" onClick={exportToCSV}>Export CSV</Button>
               <Button className="rounded-full px-5 py-3" onClick={() => { fetchTradingDesks(); fetchAnomalies(); }}>Refresh</Button>
+              <Button 
+                variant="outline"
+                className="rounded-full px-5 py-3 gap-2"
+                onClick={handleLogout}
+              >
+                <LogOut className="w-4 h-4" />
+                Logout
+              </Button>
             </div>
           </div>
 

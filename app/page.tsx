@@ -1,8 +1,9 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
+import { saveSession, isAuthenticated } from "@/lib/session"
 
 const ADMIN_EMAIL = "admin@goldmansachs.com"
 const ADMIN_PASSWORD = "goldmansachs_admin"
@@ -19,6 +20,29 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  // Check if already logged in
+  useEffect(() => {
+    setMounted(true)
+    if (isAuthenticated()) {
+      console.log("[LOGIN] User already authenticated, redirecting to dashboard")
+      // Redirect based on stored role
+      const userJson = localStorage.getItem("gs_user")
+      if (userJson) {
+        try {
+          const user = JSON.parse(userJson)
+          if (user.role.toLowerCase().includes("financial")) {
+            router.push("/dashboard/financial")
+          } else {
+            router.push("/dashboard")
+          }
+        } catch {
+          router.push("/dashboard")
+        }
+      }
+    }
+  }, [router])
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -28,7 +52,7 @@ export default function LoginPage() {
     try {
       // Admin shortcut: redirect to admin page
       if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-        router.push('/admin')
+        router.push("/admin")
         return
       }
 
@@ -36,11 +60,11 @@ export default function LoginPage() {
       const demoUser = DEMO_CREDENTIALS.find(d => d.email === email && d.password === password)
       if (demoUser) {
         // Create server-side session for demo user
-        const sessionRes = await fetch('/api/sessions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const sessionRes = await fetch("/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            action: 'create',
+            action: "create",
             email: demoUser.email,
             role: demoUser.role,
             name: demoUser.name,
@@ -48,50 +72,48 @@ export default function LoginPage() {
         })
 
         const sessionData = await sessionRes.json()
-        if (!sessionData.success) {
-          setError('Failed to create session')
+        if (!sessionData.success || !sessionData.session) {
+          setError("Failed to create session")
           setLoading(false)
           return
         }
 
-        // Store session ID in localStorage for client-side retrieval
-        try {
-          localStorage.setItem('gs_session_id', sessionData.sessionId)
-          console.log(`[LOGIN] Session ID set: ${sessionData.sessionId} for role: ${demoUser.role}`)
-        } catch (e) {
-          console.error("[LOGIN] Failed to set localStorage:", e)
-        }
+        // Store session using utility function
+        saveSession(sessionData.session)
+
+        console.log(`[LOGIN] Demo user logged in: ${demoUser.email} (${demoUser.role})`)
 
         // Redirect based on role
-        if (demoUser.role.toLowerCase().includes('financial')) {
-          router.push('/dashboard/financial')
-        } else if (demoUser.role.toLowerCase().includes('sales')) {
-          router.push('/dashboard')
+        if (demoUser.role.toLowerCase().includes("financial")) {
+          router.push("/dashboard/financial")
+        } else if (demoUser.role.toLowerCase().includes("sales")) {
+          router.push("/dashboard")
         } else {
-          router.push('/dashboard')
+          router.push("/dashboard")
         }
         return
       }
 
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      // Regular auth flow
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       })
 
       const data = await res.json()
       if (!data.success) {
-        setError(data.message || 'Invalid credentials')
+        setError(data.message || "Invalid credentials")
         setLoading(false)
         return
       }
 
       // Create server-side session
-      const sessionRes = await fetch('/api/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const sessionRes = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: 'create',
+          action: "create",
           email,
           role: data.user?.role,
           name: data.user?.name,
@@ -99,36 +121,37 @@ export default function LoginPage() {
       })
 
       const sessionData = await sessionRes.json()
-      if (!sessionData.success) {
-        setError('Failed to create session')
+      if (!sessionData.success || !sessionData.session) {
+        setError("Failed to create session")
         setLoading(false)
         return
       }
 
-      // Store session ID in localStorage for client-side retrieval
-      try {
-        localStorage.setItem('gs_session_id', sessionData.sessionId)
-        console.log(`[LOGIN] Session ID set: ${sessionData.sessionId} for role: ${data.user?.role}`)
-      } catch (e) {
-        console.error("[LOGIN] Failed to set localStorage:", e)
-      }
+      // Store session using utility function
+      saveSession(sessionData.session)
 
-      const role = (data.user?.role || '').toLowerCase()
+      console.log(`[LOGIN] User logged in: ${email} (${data.user?.role})`)
 
-      if (role.includes('financial')) {
-        router.push('/dashboard/financial')
-      } else if (role.includes('sales')) {
-        // Sales users should land on the main dashboard (which links to client pages)
-        // The project's Sales client pages live under /dashboard/client/[id]
-        router.push('/dashboard')
+      const role = (data.user?.role || "").toLowerCase()
+
+      if (role.includes("financial")) {
+        router.push("/dashboard/financial")
+      } else if (role.includes("sales")) {
+        router.push("/dashboard")
       } else {
-        router.push('/dashboard')
+        router.push("/dashboard")
       }
     } catch (err) {
-      setError('An unexpected error occurred')
+      console.error("[LOGIN] Error:", err)
+      setError("An unexpected error occurred")
     } finally {
       setLoading(false)
     }
+  }
+
+  // Don't render until mounted to prevent hydration issues
+  if (!mounted) {
+    return null
   }
 
   return (
@@ -177,9 +200,16 @@ export default function LoginPage() {
               className="w-full py-3 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold shadow-lg hover:scale-[1.01] transition-transform disabled:opacity-60"
               disabled={loading}
             >
-              {loading ? 'Signing in...' : 'Sign in'}
+              {loading ? "Signing in..." : "Sign in"}
             </button>
           </form>
+
+          {/* Demo Credentials Info */}
+          <div className="mt-6 pt-6 border-t border-gray-700 space-y-2 text-xs text-gray-400">
+            <p className="font-semibold text-gray-300">Demo Credentials:</p>
+            <p>Sales: pranav@goldmansachs.com / pranav123</p>
+            <p>Financial: abhinav@goldmansachs.com / abhinav123</p>
+          </div>
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { isAuthenticated, clearSession } from "@/lib/session"
 import { 
   Building2, 
   TrendingUp, 
@@ -17,7 +18,8 @@ import {
   ArrowUpRight,
   AlertTriangle,
   Lock,
-  X
+  X,
+  LogOut
 } from "lucide-react"
 
 // Restricted modules for Sales users
@@ -121,11 +123,20 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
+    // 1. First check if user is authenticated
+    if (!isAuthenticated()) {
+      console.log("[SALES DASHBOARD] User not authenticated, redirecting to login")
+      router.push("/")
+      return
+    }
+
+    // 2. If authenticated, proceed with fetching session data
     const fetchUserSession = async () => {
       try {
         const sessionId = localStorage.getItem("gs_session_id")
         if (!sessionId) {
-          console.log("[SALES DASHBOARD] No session ID found")
+          console.log("[SALES DASHBOARD] No session ID found, redirecting to login")
+          router.push("/")
           return
         }
 
@@ -136,26 +147,33 @@ export default function DashboardPage() {
           setUserName(data.session.name || data.session.email.split("@")[0])
           setUserRole(data.session.role)
           console.log("[SALES DASHBOARD] User session loaded:", data.session.name, "Role:", data.session.role)
+        } else {
+          console.log("[SALES DASHBOARD] Invalid session response, redirecting to login")
+          clearSession()
+          router.push("/")
         }
       } catch (error) {
         console.error("[SALES DASHBOARD] Failed to fetch session:", error)
+        clearSession()
+        router.push("/")
       }
     }
 
     fetchUserSession()
 
-    // Fetch companies
+    // 3. Fetch companies and anomalies
     fetch("/api/companies")
       .then((res) => res.json())
       .then((data) => setCompanies(data.companies))
       .catch(console.error)
 
-    // Fetch anomalies
+    // 4. Fetch anomalies
     fetch("/api/anomalies")
       .then((res) => res.json())
       .then((data) => setAnomalyCount(data.anomalies.length))
       .catch(console.error)
-  }, [])
+  }, [router])
+
 
   const stats = [
     { label: "Total Clients", value: "3", icon: Building2, color: "text-primary" },
@@ -171,21 +189,38 @@ export default function DashboardPage() {
     { name: "Risk Management", icon: AlertTriangle, clients: 2, issues: `${anomalyCount} Anomal${anomalyCount === 1 ? 'y' : 'ies'}`, href: "/dashboard/anomalies" },
   ]
 
+  const handleLogout = () => {
+    console.log("[LOGOUT] User logging out")
+    clearSession()
+    router.push("/")
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 p-8 lg:p-10">
       <div className="max-w-7xl mx-auto space-y-10">
         {/* Welcome Section */}
         <div className="space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="w-1 h-12 bg-gradient-to-b from-primary to-accent rounded-full"></div>
-            <div>
-              <h1 className="text-4xl font-bold text-foreground tracking-tight">
-                Welcome to Goldman Sachs 360° Customer Intelligence Platform
-              </h1>
-              <p className="text-lg text-muted-foreground mt-2">
-                Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {userName}. Here&apos;s your comprehensive client overview.
-              </p>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4 flex-1">
+              <div className="w-1 h-12 bg-gradient-to-b from-primary to-accent rounded-full"></div>
+              <div className="flex-1">
+                <h1 className="text-4xl font-bold text-foreground tracking-tight">
+                  Welcome to Goldman Sachs 360° Customer Intelligence Platform
+                </h1>
+                <p className="text-lg text-muted-foreground mt-2">
+                  Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {userName}. Here&apos;s your comprehensive client overview.
+                </p>
+              </div>
             </div>
+            <Button
+              onClick={handleLogout}
+              variant="outline"
+              size="lg"
+              className="whitespace-nowrap gap-2"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </Button>
           </div>
         </div>
 
